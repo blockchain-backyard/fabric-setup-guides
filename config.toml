@@ -1,0 +1,7 @@
+baseURL = "/"
+relativeURLs = true
+languageCode = "en-us"
+publishDir = "docs"
+title = "Fabric Setup Guides"
+
+theme = "hugo-theme-learn"
