@@ -3,6 +3,11 @@
   xmlns:xhtml="http://www.w3.org/1999/xhtml">
   
   <url>
+    <loc>/chaincode-libraries/</loc>
+    <lastmod>2018-07-13T16:09:42+05:30</lastmod>
+  </url>
+  
+  <url>
     <loc>/</loc>
     <lastmod>2018-02-28T14:40:04+05:30</lastmod>
   </url>

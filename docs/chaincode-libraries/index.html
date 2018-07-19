@@ -9,7 +9,7 @@
 
     <link rel="shortcut icon" href="../images/favicon.png" type="image/x-icon" />
 <link rel="icon" href="../images/favicon.png" type="image/x-icon" />
-    <title>Categories :: Fabric Setup Guides</title>
+    <title>Chaincode Libraries :: Fabric Setup Guides</title>
     
     
     <link href="../css/nucleus.css?1531977960" rel="stylesheet">
@@ -32,7 +32,7 @@
     </style>
     
   </head>
-  <body class="" data-url="/categories/">
+  <body class="" data-url="/chaincode-libraries/">
     <nav id="sidebar" class="">
 
 
@@ -91,8 +91,8 @@
   
     
     <li data-nav-id="/chaincode-libraries/" title="Chaincode Libraries" class="dd-item 
-        
-        
+        parent
+        active
         
         ">
       <a href="../chaincode-libraries/">
@@ -145,7 +145,13 @@
                     
           
           
-            Categories
+            
+            
+          
+          
+            <a href='../'>What is this?</a> > Chaincode Libraries
+          
+         
           
            
                   </span>
@@ -153,7 +159,34 @@
                 
                     <div class="progress">
     <div class="wrapper">
-
+<nav id="TableOfContents">
+<ul>
+<li>
+<ul>
+<li>
+<ul>
+<li><a href="#approach-1-the-easy-way">Approach 1: The easy way</a>
+<ul>
+<li>
+<ul>
+<li><a href="#pros">Pros</a></li>
+<li><a href="#cons">Cons</a></li>
+</ul></li>
+<li><a href="#step-1-create-a-dockerfile-packing-your-software">Step 1: Create a Dockerfile packing your software</a></li>
+<li><a href="#step-2-build-your-alternative-ccenv-container">Step 2: Build your alternative ccenv container</a></li>
+<li><a href="#step-3-instruct-your-peers-to-use-this-ccenv-as-chaincode-runtime">Step 3: Instruct your peers to use this ccenv as chaincode runtime</a></li>
+</ul></li>
+<li><a href="#approach-2-modify-fabric-source">Approach 2: Modify Fabric source</a>
+<ul>
+<li><a href="#pros-1">Pros</a></li>
+<li><a href="#cons-1">Cons</a></li>
+<li><a href="#step-1-add-your-software-to-the-base-ccenv">Step 1: Add your software to the base ccenv</a></li>
+<li><a href="#step-2-prepare-fabric-peers">Step 2: Prepare fabric peers</a></li>
+</ul></li>
+</ul></li>
+</ul></li>
+</ul>
+</nav>
     </div>
 </div>
 
@@ -165,12 +198,97 @@
         
         <div id="body-inner">
           
-            <h1>Categories</h1>
+            <h1>Chaincode Libraries</h1>
           
 
         
 
 
+
+
+<p>The aim of this guide is to enable adding new software to chaincode containers.</p>
+
+<p>For whatever reason, esp for research experimentation, there is a requirement to bundle/package some software into the chaincode container. This software could be extra libraries that can be used by your chaincode in some way. Maybe, it is in the same language that the chaincode is written in but cannot be vendored in. Maybe it is a special implmentation in some other language.</p>
+
+<p>The core idea is this: boost the default <code>ccenv</code> image to include the required software.</p>
+
+<h3 id="approach-1-the-easy-way">Approach 1: The easy way</h3>
+
+<p>This approach allows you to achieve the result by overriding the image used by Fabric peers at runtime.</p>
+
+<h5 id="pros">Pros</h5>
+
+<p>Dynamically choose chaincode base. Good for experiments and one-off runs.</p>
+
+<h5 id="cons">Cons</h5>
+
+<p>Used this way, there is a chance of mistakenly reaching a state where different peers have different chaincode bases. Not recommended for production or large setups.</p>
+
+<h4 id="step-1-create-a-dockerfile-packing-your-software">Step 1: Create a Dockerfile packing your software</h4>
+
+<p>The only difficult step here is the base image. We need to use the image currently being used by Fabric ccenv as our base image.</p>
+
+<p>We can find this version using something like:</p>
+
+<pre><code>docker images | grep &quot;fabric-baseos&quot;
+</code></pre>
+
+<p>The base image we need to use is the full name of the image that comes up including the tag. Something like,
+<code>hyperledger/fabric-baseos:&lt;arch&gt;-&lt;version&gt;</code>.</p>
+
+<p>Now we create a Dockerfile that looks like this:</p>
+
+<pre><code>FROM &lt;name of baseimage above&gt;
+
+RUN &lt;commands to install stuff you need here&gt;
+RUN &lt;more stuff&gt;
+</code></pre>
+
+<h4 id="step-2-build-your-alternative-ccenv-container">Step 2: Build your alternative ccenv container</h4>
+
+<p>We build a Docker images from this Dockerfile, using a command like:</p>
+
+<pre><code>docker build -t &lt;name&gt; .
+</code></pre>
+
+<p>Name can be something suitable to your setup, for eg, <code>myname/ccenv:latest</code>.</p>
+
+<h4 id="step-3-instruct-your-peers-to-use-this-ccenv-as-chaincode-runtime">Step 3: Instruct your peers to use this ccenv as chaincode runtime</h4>
+
+<p>This is the final step. In you <code>docker-compose.yml</code> files or equivalent that is used to setup Fabric, there are sections pertaining to Fabric orderers, CAs, cli and peers. Often the peer services extend from a peer-base service that is used to store configuration common to all peers. We need to add an extra configuration here that tells all peer containers to use our new chaincode base environment. Thanks to the way Fabric is written, this can be done via an environment variable.</p>
+
+<p>In the peer base yml file, all you need to add is an env variable like so in the environment section.</p>
+
+<pre><code>  - CORE_CHAINCODE_GOLANG_RUNTIME=&quot;myname/ccenv:latest&quot;
+</code></pre>
+
+<p>That&rsquo;s it. Now when you start a network using the equiavalent of <code>docker-compose up</code>, new chaincodes should be spawned using the new bases. You can call programs installed into the new base from your chaincode.</p>
+
+<p>You can add additional variables replacing GOLANG with JAVA or NODE for chaincodes written in the respective languages. You can also use different bases for different languages.</p>
+
+<p>Note that you can also override the variable on a per peer basis in the docker compose files as needed to have different bases for different peers.</p>
+
+<h3 id="approach-2-modify-fabric-source">Approach 2: Modify Fabric source</h3>
+
+<p>Useful in cases where you need to control a full set of Fabric peers and you would rather maintain a patched version of Fabric.</p>
+
+<h4 id="pros-1">Pros</h4>
+
+<p>Good for production setup where all peers have to be uniform. Less chances of mistakes in runtime.</p>
+
+<h4 id="cons-1">Cons</h4>
+
+<p>You will have to recompile fabric from source in this approach.</p>
+
+<h4 id="step-1-add-your-software-to-the-base-ccenv">Step 1: Add your software to the base ccenv</h4>
+
+<p>TODO</p>
+
+<h4 id="step-2-prepare-fabric-peers">Step 2: Prepare fabric peers</h4>
+
+<p>TODO</p>
+
+<p>Authors: &ldquo;Chander Govindarajan &amp; Dandasai S Kotireddy&rdquo;</p>
 
 
 <footer class=" footline" >
@@ -208,8 +326,6 @@
             
                 
                     
-                        
-                        
                     
                 
                 
@@ -229,8 +345,8 @@
 
 
         
+            <a class="nav nav-prev" href="../" title="What is this?"> <i class="fa fa-chevron-left"></i></a>
         
-            <a class="nav nav-next" href="../chaincode-libraries/" title="Chaincode Libraries" style="margin-right: 0px;"><i class="fa fa-chevron-right"></i></a>
         
     </div>
 
